@@ -1,0 +1,604 @@
+﻿
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LabelFlow AI - PDF Analyzer</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: Arial, sans-serif;
+      background: #f3f6fb;
+      color: #172033;
+    }
+
+    main {
+      max-width: 950px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: #173b7a;
+      color: white;
+      padding: 25px;
+      border-radius: 14px;
+      margin-bottom: 20px;
+    }
+
+    header h1 {
+      margin: 0 0 8px;
+    }
+
+    header p {
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .card {
+      background: white;
+      padding: 24px;
+      margin: 18px 0;
+      border-radius: 12px;
+      box-shadow: 0 3px 14px #0000000c;
+    }
+
+    h2 {
+      margin-top: 0;
+      color: #173b7a;
+    }
+
+    button {
+      background: #2457c5;
+      color: white;
+      border: 0;
+      padding: 12px 18px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 15px;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    input[type="file"] {
+      display: block;
+      margin: 18px 0;
+      max-width: 100%;
+    }
+
+    #status {
+      padding: 12px;
+      background: #f0f4fa;
+      border-radius: 7px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .page {
+      border-top: 1px solid #d9e0eb;
+      padding: 16px 0;
+    }
+
+    .page pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      background: #f8fafc;
+      padding: 14px;
+      border-radius: 7px;
+    }
+
+    .check {
+      padding: 12px;
+      margin: 9px 0;
+      border-radius: 7px;
+      background: #f4f7fb;
+      line-height: 1.5;
+    }
+
+    .passed {
+      border-left: 4px solid #218653;
+    }
+
+    .review {
+      border-left: 4px solid #d99520;
+    }
+
+    .disclaimer {
+      color: #5b6474;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    a {
+      color: #2457c5;
+    }
+  </style>
+</head>
+
+<body>
+<main>
+  <header>
+    <h1>LabelFlow AI</h1>
+    <p>Medical Device Labeling Management</p>
+    <p>PDF text extraction and preliminary label screening</p>
+  </header>
+
+  <section class="card">
+    <h2>1. Upload Label PDF</h2>
+    <p>Select a PDF to extract its text and run preliminary keyword checks.</p>
+
+    <form id="uploadForm">
+      <input
+        id="pdfFile"
+        type="file"
+        accept=".pdf,application/pdf"
+        required
+      >
+
+      <button id="submitBtn" type="submit">
+        Upload and Analyze
+      </button>
+    </form>
+
+    <p id="status" role="status">Ready to upload.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. Extracted Text</h2>
+    <div id="extractedResults">
+      Upload a PDF to see its extracted text here.
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>3. Preliminary Compliance Screening</h2>
+    <div id="complianceResults">
+      Compliance screening results will appear here after upload.
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Important Information</h2>
+    <p class="disclaimer">
+      This prototype extracts selectable text from PDFs and checks for
+      selected keywords. A passed check only means that a matching keyword
+      was found. A failed check does not establish regulatory noncompliance.
+      Actual labeling requirements depend on the device, intended use,
+      target market, and applicable regulations. Human regulatory review
+      is required before any label is approved or released.
+    </p>
+  </section>
+
+  <p>
+    <a href="./index.html">Return to the original LabelFlow AI dashboard</a>
+  </p>
+</main>
+
+<script>
+  const uploadForm = document.getElementById("uploadForm");
+  const pdfFile = document.getElementById("pdfFile");
+  const submitBtn = document.getElementById("submitBtn");
+  const statusBox = document.getElementById("status");
+  const extractedResults = document.getElementById("extractedResults");
+  const complianceResults = document.getElementById("complianceResults");
+
+  uploadForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+
+    const file = pdfFile.files[0];
+
+    if (!file) {
+      statusBox.textContent = "Please select a PDF file.";
+      return;
+    }
+
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      statusBox.textContent = "Please select a PDF file.";
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    submitBtn.disabled = true;
+    statusBox.textContent = "Uploading PDF and extracting text...";
+    extractedResults.replaceChildren();
+    complianceResults.replaceChildren();
+
+    try {
+      // Step 1: Upload the PDF and extract text.
+      const extractResponse = await fetch(
+        "http://127.0.0.1:8000/extract-pdf",
+        {
+          method: "POST",
+          body: formData
+        }
+      );
+
+      const extraction = await extractResponse.json();
+
+      if (!extractResponse.ok) {
+        throw new Error(
+          extraction.detail || "PDF extraction failed."
+        );
+      }
+
+      statusBox.textContent =
+        "PDF extracted successfully. Pages: " + extraction.page_count;
+
+      const fileHeading = document.createElement("p");
+      fileHeading.textContent = "File: " + extraction.filename;
+      extractedResults.appendChild(fileHeading);
+
+      extraction.pages.forEach(function (page) {
+        const section = document.createElement("section");
+        section.className = "page";
+
+        const heading = document.createElement("h3");
+        heading.textContent = "Page " + page.page;
+
+        const content = document.createElement("pre");
+        content.textContent =
+          page.text || "[No selectable text found on this page.]";
+
+        section.append(heading, content);
+        extractedResults.appendChild(section);
+      });
+
+      // Step 2: Send extracted text to the compliance endpoint.
+      statusBox.textContent =
+        "Text extracted. Running preliminary compliance screening...";
+
+      const fullText = extraction.pages
+        .map(function (page) {
+          return page.text;
+        })
+        .join("\n");
+
+      if (!fullText.trim()) {
+        complianceResults.textContent =
+          "No selectable text was found. OCR may be required for this PDF.";
+        statusBox.textContent =
+          "PDF processed, but no selectable text was found.";
+        return;
+      }
+
+      const complianceResponse = await fetch(
+        "http://127.0.0.1:8000/check-compliance",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            text: fullText
+          })
+        }
+      );
+
+      const compliance = await complianceResponse.json();
+
+      if (!complianceResponse.ok) {
+        throw new Error(
+          compliance.detail || "Compliance screening failed."
+        );
+      }
+
+      // Step 3: Display the screening summary.
+      const summary = document.createElement("h3");
+      summary.textContent =
+        "Keyword checks passed: " +
+        compliance.checks_passed +
+        " of " +
+        compliance.checks_total;
+
+      complianceResults.appendChild(summary);
+
+      const explanation = document.createElement("p");
+      explanation.textContent =
+        "Review each item below. These checks do not determine regulatory compliance.";
+      complianceResults.appendChild(explanation);
+
+      // Step 4: Display every individual check.
+      compliance.checks.forEach(function (check) {
+        const item = document.createElement("div");
+        item.className = "check " +
+          (check.passed ? "passed" : "review");
+
+        const title = document.createElement("strong");
+        title.textContent =
+          (check.passed ? "FOUND: " : "REVIEW: ") + check.item;
+
+        const note = document.createElement("p");
+        note.textContent = check.note;
+
+        item.append(title, note);
+        complianceResults.appendChild(item);
+      });
+
+      const disclaimer = document.createElement("p");
+      disclaimer.className = "disclaimer";
+      disclaimer.textContent =
+        "Preliminary keyword screening only. This report is not regulatory approval.";
+      complianceResults.appendChild(disclaimer);
+
+      statusBox.textContent =
+        "Analysis complete. Extracted " +
+        extraction.page_count +
+        " page(s) and completed preliminary screening.";
+
+    } catch (error) {
+      statusBox.textContent =
+        "Error: " + error.message +
+        "\nCheck that the backend is running at http://127.0.0.1:8000.";
+
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+</script>
+
+<section id="label-draft" style="max-width:850px;margin:30px auto;padding:24px;border:1px solid #d1d5db;border-radius:12px;">
+  <h2>AI-Assisted Label Draft Generator</h2>
+  <p>Enter verified product information to prepare a draft for human review.</p>
+
+  <form id="draftForm">
+    <label>Device name *</label>
+    <input name="device_name" required placeholder="DemoCare Monitoring Sensor" style="display:block;width:100%;margin:6px 0 14px;padding:10px;">
+
+    <label>Manufacturer *</label>
+    <input name="manufacturer" required placeholder="Manufacturer name" style="display:block;width:100%;margin:6px 0 14px;padding:10px;">
+
+    <label>Model number</label>
+    <input name="model_number" placeholder="DC-100" style="display:block;width:100%;margin:6px 0 14px;padding:10px;">
+
+    <label>Lot / batch number</label>
+    <input name="lot_number" placeholder="LOT-2026-0042" style="display:block;width:100%;margin:6px 0 14px;padding:10px;">
+
+    <label>Expiry date</label>
+    <input name="expiry_date" placeholder="YYYY-MM-DD" style="display:block;width:100%;margin:6px 0 14px;padding:10px;">
+
+    <label>UDI</label>
+    <input name="udi" placeholder="Enter verified UDI" style="display:block;width:100%;margin:6px 0 14px;padding:10px;">
+
+    <label>Warnings and precautions</label>
+    <textarea name="warnings" rows="3" style="display:block;width:100%;margin:6px 0 14px;padding:10px;"></textarea>
+
+    <label>Instructions for use</label>
+    <textarea name="instructions" rows="3" style="display:block;width:100%;margin:6px 0 14px;padding:10px;"></textarea>
+
+    <label>Storage conditions</label>
+    <textarea name="storage_conditions" rows="2" style="display:block;width:100%;margin:6px 0 14px;padding:10px;"></textarea>
+
+    <button type="submit">Generate Label Draft</button>
+  </form>
+
+  <p id="draftStatus" role="status"></p>
+  <pre id="draftResult" style="white-space:pre-wrap;overflow-wrap:anywhere;"></pre>
+</section>
+
+<script>
+document.getElementById("draftForm").addEventListener("submit", async function (event) {
+  event.preventDefault();
+
+  const form = event.currentTarget;
+  const status = document.getElementById("draftStatus");
+  const output = document.getElementById("draftResult");
+  const formData = new FormData(form);
+  const payload = Object.fromEntries(formData.entries());
+
+  status.textContent = "Preparing label draft...";
+  output.textContent = "";
+
+  try {
+    const response = await fetch("http://127.0.0.1:8000/generate-label-draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.detail || "Draft generation failed.");
+    }
+
+    status.textContent = "Draft prepared. Human review is required.";
+    output.textContent =
+      result.label_draft + "\n\n" + result.review_notice;
+  } catch (error) {
+    status.textContent =
+      "Error: " + error.message +
+      " Check that the LabelFlow AI backend is running.";
+  }
+});
+</script>
+
+<section id="audit-history" style="max-width:850px;margin:30px auto;padding:24px;border:1px solid #d1d5db;border-radius:12px;">
+  <h2>Audit History</h2>
+  <p>View recent label-drafting and PDF-comparison activity.</p>
+
+  <button id="loadAuditHistory" type="button">Refresh Audit History</button>
+  <p id="auditStatus" role="status"></p>
+  <div id="auditResults"></div>
+</section>
+
+<script>
+document.getElementById("loadAuditHistory").addEventListener("click", async function () {
+  const status = document.getElementById("auditStatus");
+  const results = document.getElementById("auditResults");
+
+  status.textContent = "Loading audit history...";
+  results.replaceChildren();
+
+  try {
+    const response = await fetch("http://127.0.0.1:8000/audit-history?limit=100");
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not load audit history.");
+    }
+
+    status.textContent = "Records found: " + data.count;
+
+    if (data.history.length === 0) {
+      const empty = document.createElement("p");
+      empty.textContent = "No activity recorded yet.";
+      results.appendChild(empty);
+      return;
+    }
+
+    data.history.forEach(function (record) {
+      const card = document.createElement("article");
+      card.style.cssText = "margin:12px 0;padding:14px;border:1px solid #ddd;border-radius:8px;";
+
+      const heading = document.createElement("h3");
+      heading.textContent = record.action;
+      card.appendChild(heading);
+
+      const details = document.createElement("p");
+      details.textContent = record.details || "No additional details.";
+      card.appendChild(details);
+
+      const file = document.createElement("p");
+      file.textContent = "File: " + (record.filename || "Not specified");
+      card.appendChild(file);
+
+      const time = document.createElement("small");
+      time.textContent = "Recorded: " + record.created_at;
+      card.appendChild(time);
+
+      results.appendChild(card);
+    });
+  } catch (error) {
+    status.textContent = "Error: " + error.message +
+      ". Check that the backend is running.";
+  }
+});
+</script>
+
+
+
+
+
+<section id="change-impact" style="margin: 30px auto; max-width: 850px; padding: 24px; border: 1px solid #d1d5db; border-radius: 12px;">
+  <h2>Change Impact Analysis</h2>
+  <p>Compare an original medical-device label PDF with a revised version.</p>
+
+  <form id="changeImpactForm">
+    <label for="originalPdf">Original label PDF</label><br>
+    <input id="originalPdf" type="file" accept=".pdf,application/pdf" required><br><br>
+
+    <label for="revisedPdf">Revised label PDF</label><br>
+    <input id="revisedPdf" type="file" accept=".pdf,application/pdf" required><br><br>
+
+    <button type="submit">Compare Labels</button>
+  </form>
+
+  <p id="changeImpactStatus" role="status"></p>
+  <div id="changeImpactResults"></div>
+</section>
+
+<script>
+document.getElementById("changeImpactForm").addEventListener("submit", async function (event) {
+  event.preventDefault();
+
+  const original = document.getElementById("originalPdf").files[0];
+  const revised = document.getElementById("revisedPdf").files[0];
+  const status = document.getElementById("changeImpactStatus");
+  const results = document.getElementById("changeImpactResults");
+
+  results.replaceChildren();
+  status.textContent = "";
+
+  if (!original || !revised) {
+    status.textContent = "Please select both PDF files.";
+    return;
+  }
+
+  if (!original.name.toLowerCase().endsWith(".pdf") ||
+      !revised.name.toLowerCase().endsWith(".pdf")) {
+    status.textContent = "Both files must be PDFs.";
+    return;
+  }
+
+  const data = new FormData();
+  data.append("original_file", original);
+  data.append("revised_file", revised);
+
+  status.textContent = "Comparing PDFs...";
+
+  try {
+    const response = await fetch("http://127.0.0.1:8000/change-impact", {
+      method: "POST",
+      body: data
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.detail || "Comparison failed.");
+    }
+
+    status.textContent = "Comparison completed successfully.";
+
+    const summary = document.createElement("h3");
+    summary.textContent = "Changes detected: " + result.changes_found;
+    results.appendChild(summary);
+
+    if (result.changes.length === 0) {
+      const message = document.createElement("p");
+      message.textContent = "No text changes detected.";
+      results.appendChild(message);
+    }
+
+    result.changes.forEach((change, index) => {
+      const card = document.createElement("article");
+      card.style.cssText = "margin:12px 0;padding:14px;border:1px solid #d1d5db;border-radius:8px;";
+
+      const heading = document.createElement("h4");
+      heading.textContent = "Change " + (index + 1) + ": " + change.change_type;
+      card.appendChild(heading);
+
+      const oldText = document.createElement("p");
+      oldText.textContent = "Original: " + (change.original_text.join(" ") || "(none)");
+      card.appendChild(oldText);
+
+      const newText = document.createElement("p");
+      newText.textContent = "Revised: " + (change.revised_text.join(" ") || "(none)");
+      card.appendChild(newText);
+
+      const sensitivity = document.createElement("p");
+      sensitivity.textContent = change.potentially_sensitive
+        ? "Review flag: potentially sensitive keywords detected — " + change.matched_keywords.join(", ")
+        : "Review flag: no configured sensitive keywords detected.";
+      card.appendChild(sensitivity);
+
+      results.appendChild(card);
+    });
+
+    const notice = document.createElement("p");
+    notice.textContent = result.review_notice;
+    notice.style.cssText = "margin-top:16px;font-size:0.9em;color:#8a3b12;";
+    results.appendChild(notice);
+
+  } catch (error) {
+    status.textContent = "Error: " + error.message +
+      " Check that the LabelFlow AI backend is running.";
+  }
+});
+</script>
+</body>
+</html>
+
